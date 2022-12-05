@@ -13,6 +13,7 @@ from torch.utils.data import TensorDataset, random_split
 from numba import cuda
 from GPUtil import showUtilization as gpu_usage
 import os
+from test import test_function
 
 if torch.cuda.is_available():     
     device = torch.device("cuda")
@@ -35,8 +36,9 @@ labels = dataset_filtered.real_label.values
 sentences=dataset_filtered.review.values
 
 
-#output_dir = '/home/vkesana/model_save/'
-output_dir = '/home/vkesana/model_save_closed_set_2_eph/'
+output_dir = '/home/vkesana/model_save/'
+#output_dir = '/home/vkesana/model_save_closed_set_4_eph/'
+#output_dir= '/home/vkesana/model_save_open_set_cls4_opn6_eph/'
 
 tokenizer = AutoTokenizer.from_pretrained(output_dir+'tokenizer/')
 model = AutoModelForSequenceClassification.from_pretrained(output_dir)
@@ -115,7 +117,7 @@ model.to(device)"""
 optimizer = AdamW(model.parameters(),lr = 5e-5, eps = 1e-8)
 
 
-epochs = 6
+epochs = 10
 # Total number of training steps is [number of batches] x [number of epochs]. 
 # (Note that this is not the same as the number of training samples).
 #total_steps = len(train_dataloader) * epochs
@@ -327,7 +329,7 @@ for epoch_i in range(0, epochs):
         kthlogits2 = ReLU(kthlogits2)
         kthloss2 = -1 * torch.log(kthlogits2 + eps)
         kthloss2 = torch.sum(kthloss2)/len(b_labels_l2)
-        loss = (2 * loss2) + kthloss2 + loss1 + (0.4 * kthloss1) 
+        loss = (loss2) + (0.2*kthloss2)+ (0.8*loss1) + (0.2*kthloss1) 
 
         # Accumulate the training loss over all of the batches so that we can
         # calculate the average loss at the end. `loss` is a Tensor containing a
@@ -468,6 +470,31 @@ for epoch_i in range(0, epochs):
         }
     )
 
+    print("################################# Saving Model #####################################")
+
+    output_dir = "/home/vkesana/model_save_open_set_cls6_opn"+str(epoch_i+1)+"_eph/"
+    
+    # Create output directory if needed
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+    if not os.path.exists(output_dir+'tokenizer/'):
+        os.makedirs(output_dir+'tokenizer/')
+        
+    print("Saving model to %s" % output_dir)
+    
+    model_to_save = model.module if hasattr(model, 'module') else model  # Take care of distributed/parallel training
+    model_to_save.save_pretrained(output_dir)
+    tokenizer.save_pretrained(output_dir+'tokenizer/')
+
+
+
+    print("################################# Testing ##########################################")
+    try:
+        test_function(tokenizer, model, device,epoch_i+1)
+    except Exception as e:
+        print(e)
+    
+
 print("")
 print("Training complete!")
 
@@ -581,16 +608,3 @@ print("Total training took {:} (h:mm:ss)".format(format_time(time.time()-total_t
 
 
 
-output_dir = '/home/vkesana/model_save_open_set_cls2_opn6_eph/'
-
-# Create output directory if needed
-if not os.path.exists(output_dir):
-    os.makedirs(output_dir)
-if not os.path.exists(output_dir+'tokenizer/'):
-    os.makedirs(output_dir+'tokenizer/')
-
-print("Saving model to %s" % output_dir)
-
-model_to_save = model.module if hasattr(model, 'module') else model  # Take care of distributed/parallel training
-model_to_save.save_pretrained(output_dir)
-tokenizer.save_pretrained(output_dir+'tokenizer/')
